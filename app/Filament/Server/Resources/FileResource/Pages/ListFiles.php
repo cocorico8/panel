@@ -13,6 +13,8 @@ use App\Repositories\Daemon\DaemonFileRepository;
 use App\Services\Nodes\NodeJWTService;
 use App\Filament\Components\Tables\Columns\BytesColumn;
 use App\Filament\Components\Tables\Columns\DateTimeColumn;
+use AymanAlhattami\FilamentContextMenu\Actions\RefreshAction;
+use AymanAlhattami\FilamentContextMenu\Traits\PageHasContextMenu;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action as HeaderAction;
 use Filament\Facades\Filament;
@@ -44,6 +46,8 @@ use Livewire\Attributes\Locked;
 
 class ListFiles extends ListRecords
 {
+    use PageHasContextMenu;
+
     protected static string $resource = FileResource::class;
 
     #[Locked]
@@ -78,7 +82,7 @@ class ListFiles extends ListRecords
         $server = Filament::getTenant();
 
         return $table
-            ->paginated([15, 25, 50, 100])
+            ->paginated([15, 25, 50, 100, 250])
             ->defaultPaginationPageOption(15)
             ->query(fn () => File::get($server, $this->path)->orderByDesc('is_directory'))
             ->defaultSort('name')
@@ -573,5 +577,40 @@ class ListFiles extends ListRecords
         }
 
         return [];
+    }
+
+    public static function getContextMenuActions(): array
+    {
+        /** @var Server $server */
+        $server = Filament::getTenant();
+
+        return [
+            \Filament\Actions\EditAction::make('edit')
+                ->link()
+                ->authorize(fn () => auth()->user()->can(Permission::ACTION_FILE_READ_CONTENT, $server))
+                ->label('Edit')
+                ->icon('tabler-edit')
+                ->url(fn (File $file) => EditFiles::getUrl(['path' => join_paths('1', '22')])),
+            RefreshAction::make()->color('success')->icon('tabler-refresh'),
+            \Filament\Actions\Action::make('delete')
+                ->link()
+                ->authorize(fn () => auth()->user()->can(Permission::ACTION_FILE_DELETE, $server))
+                ->label('Delete')
+                ->color('danger')
+                ->icon('tabler-trash')
+                ->requiresConfirmation()
+                ->modalDescription(fn (File $file) => '$file->name')
+                ->modalHeading('Delete file?')
+                ->action(function (File $file, DaemonFileRepository $fileRepository) use ($server) {
+                    $fileRepository
+                        ->setServer($server)
+                        ->deleteFiles('$this->path', ['$file->name']);
+
+                    Activity::event('server:file.delete')
+                        ->property('directory', '$this->path')
+                        ->property('files', '$file->name')
+                        ->log();
+                }),
+        ];
     }
 }
