@@ -10,7 +10,10 @@ use App\Services\Nodes\NodeJWTService;
 use App\Services\Servers\GetUserPermissionsService;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\On;
+use App\Features;
 
 class ServerConsole extends Widget
 {
@@ -102,6 +105,21 @@ class ServerConsole extends Widget
             $data[$timestamp] = $value;
 
             cache()->put($cacheKey, $data, now()->addMinute());
+        }
+    }
+
+    public function getActiveFeatures(): array
+    {
+        return [new Features\MinecraftEula(), new Features\JavaVersion()];
+    }
+
+    #[On('line-to-check')]
+    public function lineToCheck(string $line)
+    {
+        foreach ($this->getActiveFeatures() as $feature) {
+          if ($feature->matchesListeners($line)) {
+             Log::info('Feature listens for this', compact(['feature', 'line']));
+          }
         }
     }
 }
